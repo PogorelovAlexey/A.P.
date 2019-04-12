@@ -1,0 +1,269 @@
+#pragma vector = USART1_RXC_vect
+__interrupt void RX_interrupt()
+{
+//=================================
+
+  byte_RX=UDR1;
+        if (byte_RX==0x3a)	// ':' - начало ответа
+        { n=0;
+          EIMSK = 0; //запрет внешних прерываний по CAN
+          buf_from_ALFA[n]=byte_RX; n++;
+        } else
+        {  buf_from_ALFA[n]=byte_RX; n++;
+        aass++;
+        if ((byte_RX==0x3B) || (n >= 60))      // ';' - конец ответа
+          { // посылка принята
+            PORTE|=0x04;
+            pr_RX=1;
+           // if (WORK==0x81)            my_priem++; 
+            
+            
+         for (q=0;q<16;q++)   
+                    { Z1= buf_from_ALFA[30+q*2];
+                      Z2= buf_from_ALFA[31+q*2];
+                      if ((Z1>=0x30)&&(Z1<=0x39)) Z1=Z1-0x30;
+                      else Z1=Z1-0x37;
+                      if ((Z2>=0x30)&&(Z2<=0x39)) Z2=Z2-0x30;
+                      else Z2=Z2-0x37;
+                      IDE[q]=(Z1<<4)|Z2;
+                    }
+                    
+                   for (q=0;q<16;q++)
+                    {CAN_OUT[3+q]=IDE[q];
+                    }
+                    
+            EIMSK = 0xC0;   
+            n=0;
+          }
+        }
+
+   }-----------------------------------------------------------------------------
+#pragma vector = USART1_TXC_vect
+__interrupt void TX_interrupt()
+{ 
+  if (PR_TX==0) goto out_int;
+
+  Count++;
+  
+  // WR => READER
+ 
+    switch  (PROV)
+      
+      {         
+        case 16:  // M_GOTO_ON
+        UDR1=FORMAT_C [Count]; 
+       if (Count==22) {PR_TX=0; Count=0; // EIMSK=0x10; 
+       CAN_OUT[0]=0x06; }    
+          break;
+         
+        case 5:  // M_AUTO_OFF   
+         UDR1=M_AUTO_OFF [Count]; 
+       if (Count==32) {PR_TX=0; Count=0;} // передача строки завершена               
+          break;
+       
+       case 18:  // M_AUTO_OFF   
+         UDR1=M_AUTO_OFF [Count]; 
+       if (Count==32) {PR_TX=0; Count=0;}             
+          break;
+       
+       
+       case 10:  // M_AUTO_OFF   
+         UDR1=M_AUTO_OFF [Count]; 
+       if (Count==32) {PR_TX=0; Count=0;}               
+          break;
+       
+         
+       case 22:  
+       UDR1=SET_RF_L [Count]; 
+       if (Count==40) {PR_TX=0; Count=0; PROV=3;
+       } // передача строки завершена      
+       break;
+       
+       case 23:  
+       UDR1=SET_RF_H [Count]; 
+       if (Count==40) {PR_TX=0; Count=0; PROV=3;
+       } // передача строки завершена      
+       break;
+       
+   
+      default: break;
+      } 
+       
+
+out_int:
+;  
+}
+
+//------------------------------------------------------------------------------
+#pragma vector = INT7_vect
+__interrupt void CAN_interrupt1()
+{
+  NUM_CAN=0;
+//  PORTC&=0xFB;    // 0 - bit 2
+  count_CAN++;
+
+  // считываем  CANSTAT - adr 0x0E
+
+SET_CS_0();
+Spi_write_data(SPI_Read);  // KOM
+Spi_write_data(0x2C);       // CANINTF
+
+Spi_write_data(0x0);
+INTF=Spi_read_data();
+Spi_write_data(0x0);
+EFLG=Spi_read_data();   //0x2D
+Spi_write_data(0x0);
+reg_CAN=Spi_read_data();  // CANSTAT   0x2E  - 0xXE
+SET_CS_1(); 
+
+// определяем тип прерывания
+  switch (reg_CAN)
+  { 
+   //======================================
+   case 0x00 : maska=0x80; break;
+    // priem BUF 0
+    case  0x0C : maska=0x01; 
+    priem=1;
+    count_RD++;
+      CAN1_rd++;
+    NUM_MES_OK|=0x01;    
+    SET_CS_0();
+    Spi_write_data(SPI_Read);  // KOM
+    Spi_write_data(0x66);
+    // read 8 byte
+    for (v=0; v<8; v++)
+    { Spi_write_data(0x0);
+      CAN_in[v]=Spi_read_data();
+    }
+    SET_CS_1();
+    kom_BUP=CAN_in[0];
+
+//=========================================
+    break; // RD buf0
+    case  0x0E : maska=0x02;    // RD_BUF_1 
+        priem_2=1;
+    count_RD++;
+    NUM_MES_OK|=0x02;    
+    SET_CS_0();
+    Spi_write_data(SPI_Read);  // KOM
+    Spi_write_data(0x76);
+    // read 8 byte
+    for (v=0; v<8; v++)
+    { Spi_write_data(0x0);
+      CAN_in_2[v]=Spi_read_data();
+    }
+    SET_CS_1();     
+                
+                break;   // RD buf1
+    case  0x06 : maska=0x04; count_WR++; ZAP1 = 1; break;   // TX0
+    case  0x02 : maska=0x20; break;   //
+    case  0x04 : maska=0x40; break;   // 
+    case  0x08 : maska=0x08; count_WR++; ZAP2 = 1; break;   // TX1
+    case  0x0A : maska=0x10; break;   // 
+   
+        default : maska=0xFF;  break;
+  }
+  
+    flag=PINB;
+SET_CS_0();
+Spi_write_data(SPI_Bit_Modify);  // KOM
+Spi_write_data(0x2C);       // ADR CANINTF
+Spi_write_data(maska);       // MASKA
+Spi_write_data(0x0);       // DAN  
+SET_CS_1();  
+
+SET_CS_0();
+Spi_write_data(SPI_Write);  // KOM
+Spi_write_data(0x1C);       // ADR  TEC
+Spi_write_data(0x00);      
+Spi_write_data(0x00);       // BYTE adr 0x1D - REC
+SET_CS_1();
+
+}  
+
+//------------------------------------------------------------------------------
+#pragma vector = INT6_vect
+__interrupt void CAN_interrupt2()
+{
+  NUM_CAN=1;
+//  PORTC&=0xFB;    // 0 - bit 2
+ count_CAN++;
+
+  // считываем  CANSTAT - adr 0x0E
+
+SET_CS_0();
+Spi_write_data(SPI_Read);  // KOM
+Spi_write_data(0x2C);       // CANINTF
+
+Spi_write_data(0x0);
+INTF=Spi_read_data();
+Spi_write_data(0x0);
+EFLG=Spi_read_data();   //0x2D
+Spi_write_data(0x0);
+reg_CAN=Spi_read_data();  // CANSTAT   0x2E  - 0xXE
+SET_CS_1();
+
+
+// определяем тип прерывания
+  switch (reg_CAN)
+  { 
+   //======================================
+   case 0x00 : maska=0x80; break;
+    // priem BUF 0
+    case  0x0C : maska=0x01; 
+    priem=1;
+    count_RD++;
+      CAN2_rd++;  
+    NUM_MES_OK|=0x01;    
+    SET_CS_0();
+    Spi_write_data(SPI_Read);  // KOM
+    Spi_write_data(0x66);
+    // read 8 byte
+    for (v=0; v<8; v++)
+    { Spi_write_data(0x0);
+      CAN_in[v]=Spi_read_data();
+    }
+    SET_CS_1(); 
+    kom_BUP=CAN_in[0];
+
+//=========================================
+    break; // RD buf0
+    case  0x0E : maska=0x02;   // RD_BUF1 
+        priem_2=1;
+    count_RD++;
+    NUM_MES_OK|=0x02;    
+    SET_CS_0();
+    Spi_write_data(SPI_Read);  // KOM
+    Spi_write_data(0x76);
+    // read 8 byte
+    for (v=0; v<8; v++)
+    { Spi_write_data(0x0);
+      CAN_in_2[v]=Spi_read_data();
+    }
+    SET_CS_1(); 
+              
+          break;   // RD buf1
+    case  0x06 : maska=0x04; count_WR++; ZAP1 = 1; break;   // TX0
+    case  0x02 : maska=0x20; break;   //
+    case  0x04 : maska=0x40; break;   // 
+    case  0x08 : maska=0x08; count_WR++; ZAP2 = 1;  break;   // TX1
+    case  0x0A : maska=0x10; break;   // 
+   
+        default : maska=0xFF;  break;
+  }
+  
+    flag=PINB;
+SET_CS_0();
+Spi_write_data(SPI_Bit_Modify);  // KOM
+Spi_write_data(0x2C);       // ADR CANINTF
+Spi_write_data(maska);       // MASKA
+Spi_write_data(0x0);       // DAN  
+SET_CS_1();  
+
+SET_CS_0();
+Spi_write_data(SPI_Write);  // KOM
+Spi_write_data(0x1C);       // ADR  TEC
+Spi_write_data(0x00);       // BYTE - TEC
+Spi_write_data(0x00);       // BYTE adr 0x1D - REC
+SET_CS_1();
+}  
