@@ -1,0 +1,558 @@
+#include <iostream>
+#include <fstream>
+#include <math.h>
+#include <conio.h>
+#include <windows.h>
+#include <stdio.h>
+#include <WinError.h>
+#include <setupapi.h>
+#include <devguid.h>
+#include <regstr.h>
+#include <string>
+
+  HANDLE hWriteURT;
+
+    int const rm=5;  //размер массивов cVID, cPID
+//	 bool __fastcall GetVID_PID(WCHAR* DevicePath,
+//	unsigned short *VendorID, unsigned short *ProductID);
+     bool __fastcall GetVID_PID(CHAR* DevicePath,
+	 char *cVID, char *cPID, int rm);
+     bool __fastcall ConfigureAdapterURT();
+     bool __fastcall InitAdapterURT();
+	 bool __fastcall WriteData1();
+
+  void __fastcall  Text_err(int);
+//GUID Guid = {0x37538c66, 0x9584, 0x42d3, {0x96, 0x32, 0xeb, 0xad, 0x0a, 0x23, 0x0d, 0x13}};
+GUID Guid = {0xA5DCBF10, 0x6530, 0x11D2, 0x90, 0x1F, 0x00, 0xC0, 0x4F, 0xB9, 0x51, 0xED};  
+
+void tst_sk();
+ using namespace std;
+     float sk_tek, sk_dop, sk_rek,usk;
+	 int i;
+	 unsigned char out_mas[7];
+     HANDLE hCom;
+	 char bufrus[256];
+
+  char* rus(const char *text)
+  {
+  CharToOem (text,bufrus);
+  return bufrus;
+  }
+
+ void coder2()
+	{	
+	int n=0,KC=0;
+	out_mas[0] = fabs ( sk_tek );
+	out_mas[1] = 0xAA;
+	out_mas[2] = sk_dop ;
+	out_mas[3] = usk;
+	out_mas[4] = sk_rek;
+	out_mas[5] = 0x55;
+// KC
+
+	for (n=0; n<6; n++)
+	KC=KC+out_mas[n];
+
+	out_mas[6] = 0xFF - KC;
+//	return 0;
+	}
+ 
+ pr_mas()
+ {  
+//	 cout <<rus("Передача данных в порт")<<endl;	
+ 		DWORD nb;  //число фактически переданных байт
+		DWORD temp;
+		COMSTAT ComState;
+//		OVERLAPPED ov; //адрес структуры OVERLAPPED, используемой для асинхронных операций
+
+		ClearCommError(hCom,&temp, &ComState);
+//temp не равно 0 - порт в состоянии ошибки
+//		cout<<"temp="<<temp<<endl;
+//        temp=0;
+        int y;
+        if(!temp)
+		{
+      EscapeCommFunction(hCom, CLRRTS);    //сброс сигнала RTS
+		for(i=0;i<700000;i++); //660 mks
+
+	    	for(y=0;y<7;y++)
+			{
+ 			WriteFile(hCom,&out_mas[y],1,&nb,NULL);						
+//   WriteFile(hCom,out_mas,sizeof(out_mas),&nb,&ov); 
+//	cout<<" nb= "<<nb<<endl;  
+			}
+    		for(i=0;i<1800000;i++); //660 mks
+        	EscapeCommFunction(hCom, SETRTS);   //установка сигнала RTS
+		   for(i=0;i<3300000;i++); //660 mks
+		}
+		else
+			cout<<rus(" Порт в состоянии ошибки")<<endl;
+ return 0;
+ }
+  
+void tst_sk()
+   {
+	 int key,n,kp=0;  // kp - количество передач
+	 int kn=0;          // kn - количество нажатий клавиш " " и "esc"
+	 cout<<rus("  Тест скоростемера ")<<endl;
+     ifstream in("Sktestu.dat");
+	 if(!in){
+		 cout<<"error open "<<endl;
+	 }
+     else
+	 {
+	  while(1){
+//      cout<<rus("Для продолжения нажмите ' ', для выхода- esc")<<endl;
+    /*	 
+	 key=getch();
+//    cout<<key<<"\n";
+     if (key!=32) break;
+*/
+	  in>>sk_tek>>sk_dop>>usk>>sk_rek;
+      if (!in.eof()){
+      cout<<rus("Для продолжения нажмите ' ', для выхода- esc")<<endl;
+	  cout<<endl;
+	  cout<<rus("Скорость текущая           ")<<sk_tek<<endl;
+      cout<<rus("Скорость допустимая        ")<<sk_dop<<endl;
+	  cout<<rus("Скорость предупредительная ")<<sk_rek<<endl;
+	  cout<<rus("Разовые команды            ")<<usk<<endl;
+	 
+	  coder2();	  	  
+ 	  while(1)
+ //     for (n=0; n<1000; n++)
+	  {
+//	 cout<<("GetKeyState(VK_SPACE)=")<<GetKeyState(VK_SPACE)<<endl;
+//       pr_mas(); 
+//         WriteData ();       //вывод всего массива
+         WriteData1 ();   //вывод побайтно
+	   kp=kp+1;
+       if (GetKeyState(VK_SPACE)<0)
+	   	   {
+	     	 cout<<rus("Нажат пробел")<<endl;
+			 Sleep( 1000);
+			 kn=kn+1;
+		     key=32;
+		     break;
+	   	   }
+	   
+       if (GetKeyState(VK_ESCAPE)<0)
+    	   {
+		   cout<<rus("Нажата ESC")<<endl;
+		   Sleep( 1000);
+		   key=27;
+		   kn=kn+1;
+		   break;
+		   } 
+                                                                                	 
+	  } 
+
+	cout<<rus(" количество передач kp= ")<<kp<<endl;     //проверка  
+	 }
+   else break;
+//   cout<<" key= "<<key<<endl;     //проверка
+   if (key==27) break;    
+   key=0;
+   	 }
+	}
+//	 cout<<"kn="<<kn<<endl;
+	 for (n=0; n<kn; n++)
+	 getch();	
+	 in.close();	 
+ }
+
+ int main()
+   {
+//	 setlocale(LC_ALL,"Russian");
+	 cout<<rus("Вывод через адаптер")<<endl;	
+	 if (	InitAdapterURT()) {
+     cout<<rus("      Конфигурация  адаптера")<<endl;
+	 if (ConfigureAdapterURT() ){
+		  tst_sk();
+
+	 }
+	 }
+
+	   return 0;
+   }
+
+///конфигурация адаптера
+bool __fastcall ConfigureAdapterURT() {
+
+	unsigned char URTOut[64];
+    unsigned long	 dwBytesWritten=0;
+
+	URTOut[0] = 0xCE;
+	URTOut[1] = 0x11;
+	URTOut[2] = 0x1A;
+	/* switch(BaudRate)
+	 {
+	 case 38400:
+	 URTOut[3] = 0x01;
+	 URTOut[4] = 0xB1;
+	 break;
+	 case 57600: */
+	URTOut[3] = 0x08;
+	URTOut[4] = 0x2B;
+	/* break;
+	 } */
+
+//	cout<<"1  dwBytesWritten= "<<dwBytesWritten<<endl;
+    if (!WriteFile(hWriteURT, URTOut, 64, &dwBytesWritten, NULL)) {
+      cout<<rus("Ошибка посылки запроса: ")<<GetLastError()<<endl;
+
+//текст ошибки
+	  Text_err(GetLastError());
+/*
+	  LPVOID MsgBuf;
+	  FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM |
+                  FORMAT_MESSAGE_ALLOCATE_BUFFER,
+ NULL, GetLastError(), 
+ MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPTSTR)&MsgBuf, 0, NULL);
+     Text_err(GetLastError());
+      cout<<rus((char*)MsgBuf)<<endl;
+//	  cout<<"MsgBuf="<<rus((char*)MsgBuf)<<endl;
+// освободить буфер
+    LocalFree(MsgBuf);
+*/	
+/*
+ cout<<FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM |
+	              FORMAT_MESSAGE_IGNORE_INSERTS |  
+                  FORMAT_MESSAGE_ALLOCATE_BUFFER,
+				  NULL, GetLastError(), 
+MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPTSTR)&MsgBuf, 0, NULL)<<endl;
+    LocalFree(MsgBuf);
+*/
+//	  cout<<rus("Ошибка посылки запроса: ")<<SysErrorMessage(GetLastError())<<endl;
+	  return false;
+	}
+ //  cout<<"2  dwBytesWritten= "<<dwBytesWritten<<endl;
+     if (dwBytesWritten != 64) {
+        cout<<rus("Посылка ушла не полностью.")<<endl;
+	    return false;
+     }
+
+/*
+	if (!WriteFile(hWriteURT, URTOut, 64, &dwBytesWritten, NULL)) {
+		temp = "Ошибка посылки запроса: " + SysErrorMessage(GetLastError());
+		Application->MessageBox(temp.w_str(), ProgName, MB_OK | MB_ICONERROR);
+		return false;
+	}
+*/
+//
+	return true;
+}
+
+
+//текст ошибки
+    void __fastcall    Text_err(int kod){
+	 LPVOID MsgBuf;
+	  FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM |
+                  FORMAT_MESSAGE_ALLOCATE_BUFFER,
+// NULL, GetLastError(), 
+ NULL, kod,
+ MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPTSTR)&MsgBuf, 0, NULL);
+
+      cout<<rus((char*)MsgBuf)<<endl;
+//	  cout<<"MsgBuf="<<rus((char*)MsgBuf)<<endl;
+// освободить буфер
+    LocalFree(MsgBuf);	  
+/*
+ cout<<FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM |
+	              FORMAT_MESSAGE_IGNORE_INSERTS |  
+                  FORMAT_MESSAGE_ALLOCATE_BUFFER,
+//				  NULL, GetLastError(), 
+				   NULL, kod, 
+MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPTSTR)&MsgBuf, 0, NULL)<<endl;
+    LocalFree(MsgBuf);
+*/
+
+}
+
+
+////инициализация адаптера
+bool __fastcall InitAdapterURT() {
+	
+	HDEVINFO hDevInfoList;
+	ULONG requiredLength;   //длина буфера для симв. имени устройства
+	PSP_DEVICE_INTERFACE_DETAIL_DATA functionClassDeviceData; //структура, содерж.DevicePath
+//	wchar_t OutPipe[256], InPipe[256];
+	char OutPipe[256], InPipe[256];	
+	bool status = false, result;
+//	unsigned short VID=0, PID=0;
+
+		char cVID[rm],cPID[rm] ;
+
+	// ConnectedUSBDevices = 0;
+	// CurrentUSBDevice = 0;
+//список устройств, принадлежащих классу
+	hDevInfoList = SetupDiGetClassDevs(&Guid, NULL, NULL,
+		(DIGCF_PRESENT | DIGCF_DEVICEINTERFACE));
+	if (hDevInfoList != INVALID_HANDLE_VALUE) {
+//		cout<<"  1 hDevInfoList="<<hDevInfoList<<endl;
+		SP_DEVICE_INTERFACE_DATA deviceInfoData; //структура, содерж. инф-ию об устр-ве
+ //     		for (unsigned long int i = 0; i < 127; i++) {
+            for ( int i = 0; i < 127; i++) {
+			ZeroMemory(&deviceInfoData, sizeof(deviceInfoData));
+//			cout<<"  sizeof(deviceInfoData)="<<sizeof(deviceInfoData)<<endl;
+			deviceInfoData.cbSize = sizeof(SP_DEVICE_INTERFACE_DATA);
+//SetupDiEnumDeviceInterfaces возвращает структуру SP_DEVICE_INTERFACE_DATA
+			if (SetupDiEnumDeviceInterfaces(hDevInfoList, 0, &Guid, i,
+				&deviceInfoData)) {
+				functionClassDeviceData = NULL;
+				requiredLength = 0;
+//SetupDiGetDeviceInterfaceDetail для получения инф-ии из SP_DEVICE_INTERFACE_DATA
+				SetupDiGetDeviceInterfaceDetail(hDevInfoList, &deviceInfoData,
+					NULL, 0, &requiredLength, NULL);
+
+				functionClassDeviceData =
+					(PSP_DEVICE_INTERFACE_DETAIL_DATA)malloc(requiredLength);
+				functionClassDeviceData->cbSize =
+					sizeof(SP_DEVICE_INTERFACE_DETAIL_DATA);
+
+				if (SetupDiGetDeviceInterfaceDetail(hDevInfoList,
+					&deviceInfoData, functionClassDeviceData, requiredLength,
+					&requiredLength, NULL)) {
+					// CurrentUSBDevice++;
+
+					strcpy(OutPipe, functionClassDeviceData->DevicePath);
+					strcat(OutPipe, "\\PIPE01");
+          			strcpy(InPipe, functionClassDeviceData->DevicePath);
+					strcat(InPipe, "\\PIPE00");
+          	result = GetVID_PID(functionClassDeviceData->DevicePath, cVID, cPID,rm);
+					 if(result)
+					 {
+					cout<<"   CurrentUSBDevice VID="<<cVID<<" PID="<<cPID<<endl;
+					 } 
+					free(functionClassDeviceData);
+
+					if (result && (!strcmp(cVID,"acd1"))) {
+                          if (!strcmp(cPID,"3f01"))
+//                  if (result && (!strcmp(cVID,"8564"))) {
+//					if (!strcmp(cPID,"1000"))
+								status = true;							
+					}
+
+					if (status) {
+						CloseHandle(hWriteURT);
+
+						hWriteURT /* [CurrentUSBDevice] */ =
+							CreateFile(OutPipe, GENERIC_WRITE, FILE_SHARE_WRITE,
+							NULL, OPEN_EXISTING, 0, NULL);
+						if (hWriteURT /* [CurrentUSBDevice] */ ==
+							INVALID_HANDLE_VALUE) {
+							cout<<rus("Невозможно открыть OutPipe: ")<<GetLastError()<<endl;
+//                         текст ошибки
+                           Text_err(GetLastError());
+
+//							cout<<"Невозможно открыть OutPipe: "<<ShowMsg( SysErrorMessage(GetLastError()));
+/*
+							strTemp = "Невозможно открыть OutPipe: " +
+								SysErrorMessage(GetLastError());
+							// Memo1->Lines->Add(temp);
+							
+							Application->MessageBox(strTemp.w_str(), ProgName,
+								MB_OK | MB_ICONERROR);
+*/
+							status = false;
+							break;
+						}						
+						}				
+							
+					if (status)
+						break;
+				}
+				// free(functionClassDeviceData);
+			}
+			else {
+				if (GetLastError() == ERROR_NO_MORE_ITEMS) {
+					if (!status)
+						cout<<rus("Устройство не найдено!")<<endl;
+/*
+						Application->MessageBox(L"Устройство не найдено!",
+						ProgName, MB_OK | MB_ICONEXCLAMATION);
+*/
+					break;
+				}
+			}
+		}
+	}
+
+	SetupDiDestroyDeviceInfoList(hDevInfoList);
+	return status;
+}
+
+// ---------------------------------------------------------------------------
+//bool __fastcall GetVID_PID(WCHAR* DevicePath,
+//	unsigned short *VendorID, unsigned short *ProductID) {
+	bool __fastcall GetVID_PID(CHAR* DevicePath,
+    char *cVID, char * cPID, int rm){
+    char *ptr;
+//	unsigned short VID, PID;
+//	cout<<" DevicePath="<<DevicePath<<endl;
+    cout<<endl;
+	ptr = strstr(DevicePath, "vid_");
+	if (ptr == NULL)
+		return false;
+ 	strncpy(cVID, (ptr+4),4);
+	cVID[4]='\0';   //конец строки
+//	VID=atoi(cVID);
+    cout<<"VID="<<cVID<<endl;
+    ptr = strstr(DevicePath, "pid");
+	if (ptr == NULL)
+		return false;
+	strncpy(cPID, (ptr+4),4);
+	cPID[4]='\0';
+//    PID=atoi(cPID);
+    cout<<"PID="<<cPID<<endl;
+	return true;
+}
+
+//запись
+//bool __fastcall WriteData(unsigned short addr, unsigned short data) {
+bool __fastcall WriteData () {
+	
+	unsigned char BufOutURT[64];	
+	unsigned long	 dwBytesWritten=0;
+	unsigned char BufOutURT_RTS[64];
+
+        BufOutURT_RTS[0] = 0xCE;
+		BufOutURT_RTS[1] = 0x11;
+		BufOutURT_RTS[2] = 0x3A;
+//		BufOutURT_RTS[3] = 1;
+//		BufOutURT_RTS[4] = 0;
+//		BufOutURT_RTS[5] = 1;
+							
+	 {
+		BufOutURT[0] = 0xCE;
+		BufOutURT[1] = 0x21;
+//		BufOutURT[2] = 0x80;
+		BufOutURT[2] = 0x08;
+		BufOutURT[3] = 7;
+		BufOutURT[4] = 0;
+		BufOutURT[5] = out_mas[0];
+		BufOutURT[6] = out_mas[1];
+		BufOutURT[7] = out_mas[2];
+		BufOutURT[8] = out_mas[3];
+		BufOutURT[9] = out_mas[4];
+		BufOutURT[10] = out_mas[5];
+		BufOutURT[11] = out_mas[6];
+ 
+// сброс  сигнала RTS
+/*
+    	if (!WriteFile(hWriteURT, BufOutURT_RTS, 64, &dwBytesWritten,
+			NULL)) {
+		cout<<rus("Ошибка посылки:  ")<<GetLastError()<<endl;	
+			return false;
+		}
+*/
+
+       for(i=0;i<700000;i++); //  660 mks
+//        cout<<"1  dwBytesWritten= "<<dwBytesWritten<<endl;
+		if (!WriteFile(hWriteURT, BufOutURT, 64, &dwBytesWritten,
+			NULL)) {
+		cout<<rus("Ошибка посылки:  ")<<GetLastError()<<endl;
+//      текст ошибки
+        Text_err(GetLastError());
+	   
+			return false;
+		}
+//		cout<<"2  dwBytesWritten= "<<dwBytesWritten<<endl;
+		if (dwBytesWritten != 64) {
+			cout<<rus("Посылка ушла не полностью.")<<endl;
+			return false;
+		}
+
+        for(i=0;i<1800000;i++); //660 mks
+  //      	EscapeCommFunction(hCom, SETRTS);   //установка сигнала RTS
+
+
+//    BufOutURT_RTS[]=     ; 
+/*		
+	  if (!WriteFile(hWriteURT, BufOutURT_RTS, 64, &dwBytesWritten,
+			NULL)) {
+		cout<<rus("Ошибка посылки:  ")<<GetLastError()<<endl;	
+			return false;
+		}
+*/
+		   for(i=0;i<3300000;i++); //660 mks
+	}
+	return true;
+}
+
+bool __fastcall WriteData1 () {
+	
+	unsigned char BufOutURT[64];	
+	unsigned long	 dwBytesWritten=0;
+	unsigned char BufOutURT_RTS[64];
+	int y;
+
+        BufOutURT_RTS[0] = 0xCE;
+		BufOutURT_RTS[1] = 0x11;
+		BufOutURT_RTS[2] = 0x3A;
+//		BufOutURT_RTS[3] = 1;
+//		BufOutURT_RTS[4] = 0;
+//		BufOutURT_RTS[5] = 1;
+
+							
+	 {
+		BufOutURT[0] = 0xCE;
+		BufOutURT[1] = 0x21;
+//		BufOutURT[2] = 0x80;
+		BufOutURT[2] = 0x08;
+		BufOutURT[3] = 1;
+		BufOutURT[4] = 0;
+/*
+		BufOutURT[5] = out_mas[0];
+		BufOutURT[6] = out_mas[1];
+		BufOutURT[7] = out_mas[2];
+		BufOutURT[8] = out_mas[3];
+		BufOutURT[9] = out_mas[4];
+		BufOutURT[10] = out_mas[5];
+		BufOutURT[11] = out_mas[6];
+*/	
+ 
+// сброс  сигнала RTS
+/*
+    	if (!WriteFile(hWriteURT, BufOutURT_RTS, 64, &dwBytesWritten,
+			NULL)) {
+		cout<<rus("Ошибка посылки:  ")<<GetLastError()<<endl;	
+			return false;
+		}
+*/
+
+       for(i=0;i<700000;i++); //660 mks
+//        cout<<"1  dwBytesWritten= "<<dwBytesWritten<<endl;
+
+	   for(y=0;y<7;y++)
+			{
+ //			WriteFile(hCom,&out_mas[y],1,&nb,NULL);	
+			BufOutURT[5] = out_mas[y];
+			if (!WriteFile(hWriteURT, BufOutURT, 64, &dwBytesWritten,
+			NULL)) {
+		cout<<rus("Ошибка посылки:  ")<<GetLastError()<<endl;	
+			return false;
+		}
+//		cout<<"2  dwBytesWritten= "<<dwBytesWritten<<endl;
+		if (dwBytesWritten != 64) {
+			cout<<rus("Посылка ушла не полностью.")<<endl;
+			return false;
+		}		
+			}
+        for(i=0;i<1800000;i++); //660 mks
+  //      	EscapeCommFunction(hCom, SETRTS);   //установка сигнала RTS
+
+//    BufOutURT_RTS[]=     ; 
+/*		
+	  if (!WriteFile(hWriteURT, BufOutURT_RTS, 64, &dwBytesWritten,
+			NULL)) {
+		cout<<rus("Ошибка посылки:  ")<<GetLastError()<<endl;	
+			return false;
+		}
+*/
+		   for(i=0;i<3300000;i++); //660 mks
+
+	}
+	return true;
+}
+
+	 
